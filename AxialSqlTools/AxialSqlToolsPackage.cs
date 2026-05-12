@@ -10,8 +10,6 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel.Design;
 using System.IO;
-using System.Net.Http.Headers;
-using System.Net.Http;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -63,6 +61,7 @@ namespace AxialSqlTools
     //[ProvideToolWindow(typeof(AskChatGptWindow))]
     [ProvideToolWindow(typeof(SqlServerBuildsWindow))]
     [ProvideToolWindow(typeof(QueryHistoryWindow))]
+    [ProvideToolWindow(typeof(StatisticsSummaryWindow))]
     [ProvideToolWindow(typeof(DatabaseScripterToolWindow))]
     [ProvideToolWindow(typeof(SchemaCompareWindow))]
     [ProvideToolWindow(typeof(DataImportWindow))]
@@ -103,7 +102,14 @@ namespace AxialSqlTools
             public string WorkstationId;
         }
 
+        private const string QueryHistoryStorageModeTextFiles = "TextFiles";
+        private const string QueryHistoryStorageModeDisabled = "Disabled";
+
         private static ConcurrentQueue<QueryHistoryEntry> _queryHistoryQueue = new ConcurrentQueue<QueryHistoryEntry>();
+        private static int _statisticsCaptureVersion;
+        private static int _pendingStatisticsCaptureVersion;
+        private static readonly object _statisticsCaptureSyncRoot = new object();
+        private static CancellationTokenSource _statisticsCaptureCancellationTokenSource;
         public static Logger _logger;
 
         private void InitializeLogging()
@@ -165,16 +171,31 @@ namespace AxialSqlTools
         {
             try
             {
+                string storageMode = SettingsManager.GetQueryHistoryStorageMode();
+                if (string.Equals(storageMode, QueryHistoryStorageModeDisabled, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+
+                if (string.Equals(storageMode, QueryHistoryStorageModeTextFiles, StringComparison.OrdinalIgnoreCase))
+                {
+                    await PersistDataAsJsonLineAsync(data);
+                    return;
+                }
+
                 string connectionString = SettingsManager.GetQueryHistoryConnectionString();
                 string qhTableName = SettingsManager.GetQueryHistoryTableNameOrDefault();
                 string indexNameGuid = Guid.NewGuid().ToString(); // too much complexity trying to incorporate all possible table name combinations into proper index name
 
-                if (!string.IsNullOrEmpty(connectionString))
+                if (string.IsNullOrEmpty(connectionString))
                 {
-                    using (SqlConnection connection = new SqlConnection(connectionString))
-                    {
-                        await connection.OpenAsync();
-                        string sql = $@"
+                    return;
+                }
+
+                using (SqlConnection connection = new SqlConnection(connectionString))
+                {
+                    await connection.OpenAsync();
+                    string sql = $@"
                         IF OBJECT_ID('{qhTableName}') IS NULL
                         BEGIN
                             CREATE TABLE {qhTableName} (
@@ -205,20 +226,19 @@ namespace AxialSqlTools
                                     @ExecResult, @QueryText, @DataSource, @DatabaseName, @LoginName, @WorkstationId)
                         ";
 
-                        using (SqlCommand command = new SqlCommand(sql, connection))
-                        {
-                            command.Parameters.AddWithValue("@StartTime", data.StartTime);
-                            command.Parameters.AddWithValue("@FinishTime", data.FinishTime);
-                            command.Parameters.AddWithValue("@ElapsedTime", data.ElapsedTime);
-                            command.Parameters.AddWithValue("@TotalRowsReturned", data.TotalRowsReturned);
-                            command.Parameters.AddWithValue("@ExecResult", data.ExecResult);
-                            command.Parameters.AddWithValue("@QueryText", data.QueryText.Trim());
-                            command.Parameters.AddWithValue("@DataSource", data.DataSource);
-                            command.Parameters.AddWithValue("@DatabaseName", data.DatabaseName);
-                            command.Parameters.AddWithValue("@LoginName", data.LoginName);
-                            command.Parameters.AddWithValue("@WorkstationId", data.WorkstationId);
-                            await command.ExecuteNonQueryAsync();
-                        }
+                    using (SqlCommand command = new SqlCommand(sql, connection))
+                    {
+                        command.Parameters.AddWithValue("@StartTime", data.StartTime);
+                        command.Parameters.AddWithValue("@FinishTime", data.FinishTime);
+                        command.Parameters.AddWithValue("@ElapsedTime", data.ElapsedTime);
+                        command.Parameters.AddWithValue("@TotalRowsReturned", data.TotalRowsReturned);
+                        command.Parameters.AddWithValue("@ExecResult", data.ExecResult);
+                        command.Parameters.AddWithValue("@QueryText", data.QueryText?.Trim() ?? string.Empty);
+                        command.Parameters.AddWithValue("@DataSource", data.DataSource ?? string.Empty);
+                        command.Parameters.AddWithValue("@DatabaseName", data.DatabaseName ?? string.Empty);
+                        command.Parameters.AddWithValue("@LoginName", data.LoginName ?? string.Empty);
+                        command.Parameters.AddWithValue("@WorkstationId", data.WorkstationId ?? string.Empty);
+                        await command.ExecuteNonQueryAsync();
                     }
                 }
             }
@@ -227,6 +247,19 @@ namespace AxialSqlTools
                 _logger.Error(ex, "[QueryHistory-PersistDataAsync]: An exception occurred");
             }
 
+        }
+
+        private static Task PersistDataAsJsonLineAsync(QueryHistoryEntry data)
+        {
+            string folderPath = SettingsManager.GetQueryHistoryTextFileFolder();
+            Directory.CreateDirectory(folderPath);
+
+            string fileName = $"query-history-{DateTime.UtcNow:yyyy-MM-dd}.jsonl";
+            string filePath = Path.Combine(folderPath, fileName);
+            string json = JsonConvert.SerializeObject(data);
+
+            File.AppendAllText(filePath, json + Environment.NewLine);
+            return Task.CompletedTask;
         }
         #endregion
 
@@ -290,16 +323,18 @@ namespace AxialSqlTools
                 await CopyQueryAsHtmlCommand.InitializeAsync(this);
                 await DataTransferWindowCommand.InitializeAsync(this);
                 await DataImportWindowCommand.InitializeAsync(this);
-                await CheckAddinVersionCommand.InitializeAsync(this);
                 await ResultGridCopyAsInsertCommand.InitializeAsync(this);
                 //await AskChatGptCommand.InitializeAsync(this);
                 await SqlServerBuildsWindowCommand.InitializeAsync(this);
                 await QueryHistoryWindowCommand.InitializeAsync(this);
+                await StatisticsSummaryWindowCommand.InitializeAsync(this);
                 await DatabaseScripterToolWindowCommand.InitializeAsync(this);
                 await SchemaCompareWindowCommand.InitializeAsync(this);
                 await QuickSearchWindowCommand.InitializeAsync(this);
                 await SnippetManagerWindowCommand.InitializeAsync(this);
                 await SelectCurrentStatementCommand.InitializeAsync(this);
+
+                UpdateChecker.ScheduleCheck(this, SettingsManager.GetEnableUpdateChecks());
 
             }
             catch (Exception ex)
@@ -314,12 +349,10 @@ namespace AxialSqlTools
                 IVsProfferCommands3 profferCommands3 = await base.GetServiceAsync(typeof(SVsProfferCommands)) as IVsProfferCommands3;
                 OleMenuCommandService oleMenuCommandService = await GetServiceAsync(typeof(IMenuCommandService)) as OleMenuCommandService;
 
-                /*
                 var command = application.Commands.Item("Query.Execute");
                 m_queryExecuteEvent = application.Events.get_CommandEvents(command.Guid, command.ID);
                 m_queryExecuteEvent.BeforeExecute += this.CommandEvents_BeforeExecute;
                 m_queryExecuteEvent.AfterExecute += this.CommandEvents_AfterExecute;
-                */
 
                 EnvDTE80.Events2 events = (EnvDTE80.Events2)application.Events;
                 EnvDTE.WindowEvents windowEvents = events.WindowEvents;
@@ -350,39 +383,6 @@ namespace AxialSqlTools
 
                 //---------------------------------------------------------------------------
                 RefreshTemplatesList();
-
-                //---------------------------------------------------------------------------
-                // check for a new version
-                MenuCommand Cmd = m_plugin.MenuCommandService.FindCommand(new CommandID(CheckAddinVersionCommand.CommandSet, CheckAddinVersionCommand.CommandId));
-
-                try
-                {
-                    Version currentVersion = Assembly.GetExecutingAssembly().GetName().Version;
-                    string currentVersionString = currentVersion.ToString();
-                    bool isNewVersionAvailable = false;
-
-                    using (var client = new HttpClient())
-                    {
-                        // GitHub API versioning
-                        client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("Axial-SQL-Tools", "Latest"));
-                        client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github.v3+json"));
-
-                        // Request the latest release from GitHub API
-                        var url = $"https://api.github.com/repos/Axial-SQL/AxialSqlTools/releases/latest";
-                        var response = await client.GetStringAsync(url);
-
-                        dynamic latestRelease = JsonConvert.DeserializeObject(response);
-                        var latestVersion = (string)latestRelease.tag_name;
-
-                        isNewVersionAvailable = (Version.Parse(latestVersion) > Version.Parse(currentVersionString));
-
-                    }
-
-                    Cmd.Visible = isNewVersionAvailable;
-
-                }
-                catch { Cmd.Visible = false; }
-
 
             }
             catch (Exception ex)
@@ -419,12 +419,31 @@ namespace AxialSqlTools
             
         }
 
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                UpdateChecker.LaunchDeferredUpdateOnClose();
+            }
+
+            base.Dispose(disposing);
+        }
+
         #endregion
 
         private void WindowActivated_Event(EnvDTE.Window GotFocus, EnvDTE.Window LostFocus)
         {
 
             ThreadHelper.ThrowIfNotOnUIThread();
+
+            try
+            {
+                EnsureStatisticsExecutionHookForActiveWindow("window-activated");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to reattach statistics handler during window activation.");
+            }
 
             if (SettingsManager.GetUseSnippets())
             {
@@ -504,25 +523,50 @@ namespace AxialSqlTools
             // subscribe to the execution completed event
             try
             {
-
-                var SQLResultsControl = GridAccess.GetNonPublicField(Window.Object, "m_sqlResultsControl");
-
-                EventHandler eventHandler = SQLResultsControl_ScriptExecutionCompleted;
-
-                Type targetType = SQLResultsControl.GetType();
-
-                EventInfo eventInfo = targetType.GetEvent("ScriptExecutionCompleted");
-                if (eventInfo != null)
-                {
-                    Delegate handlerDelegate = Delegate.CreateDelegate(eventInfo.EventHandlerType, eventHandler.Target, eventHandler.Method);
-                    eventInfo.RemoveEventHandler(SQLResultsControl, handlerDelegate);
-                    eventInfo.AddEventHandler(SQLResultsControl, handlerDelegate);
-                }
+                var sqlResultsControl = GridAccess.GetNonPublicField(Window.Object, "m_sqlResultsControl");
+                AttachStatisticsExecutionCompletedHandler(sqlResultsControl, "window-created");
 
             }
             catch (Exception ex) 
             {
                 _logger.Error(ex, "An exception occurred");
+            }
+        }
+
+        private static void AttachStatisticsExecutionCompletedHandler(object sqlResultsControl, string reason)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            if (sqlResultsControl == null)
+            {
+                return;
+            }
+
+            EventHandler eventHandler = SQLResultsControl_ScriptExecutionCompleted;
+
+            EventInfo eventInfo = sqlResultsControl.GetType().GetEvent("ScriptExecutionCompleted");
+            if (eventInfo == null)
+            {
+                return;
+            }
+
+            Delegate handlerDelegate = Delegate.CreateDelegate(eventInfo.EventHandlerType, eventHandler.Target, eventHandler.Method);
+            eventInfo.RemoveEventHandler(sqlResultsControl, handlerDelegate);
+            eventInfo.AddEventHandler(sqlResultsControl, handlerDelegate);
+        }
+
+        public static void EnsureStatisticsExecutionHookForActiveWindow(string reason)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            try
+            {
+                var sqlResultsControl = GridAccess.GetSQLResultsControl();
+                AttachStatisticsExecutionCompletedHandler(sqlResultsControl, reason);
+            }
+            catch (Exception ex)
+            {
+                _logger?.Error(ex, $"Failed to ensure statistics execution hook ({reason}).");
             }
         }
 
@@ -547,7 +591,7 @@ namespace AxialSqlTools
                         {
                             string fileNameWithoutExtension = Path.GetFileNameWithoutExtension(fi.Name);
 
-                            globalSnippets.Add(fileNameWithoutExtension, System.IO.File.ReadAllText(fi.FullName));
+                            globalSnippets.Add(fileNameWithoutExtension.ToUpper(), System.IO.File.ReadAllText(fi.FullName));
                         }
 
                     }
@@ -718,11 +762,181 @@ namespace AxialSqlTools
                 _logger.Error(ex, "An exception occurred");
             }
 
+            if (!StatisticsSummaryStore.IsWindowOpen())
+            {
+                _ = ThreadHelper.JoinableTaskFactory.RunAsync(async delegate
+                {
+                    await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                    EnsureStatisticsExecutionHookForActiveWindow("post-skip");
+                });
+
+                return;
+            }
+
+            var captureVersion = Interlocked.Exchange(ref _pendingStatisticsCaptureVersion, 0);
+            if (captureVersion == 0)
+            {
+                captureVersion = Interlocked.Increment(ref _statisticsCaptureVersion);
+            }
+
+            if (!StatisticsSummaryStore.BeginCapture(captureVersion))
+            {
+                return;
+            }
+
+            var captureCancellationTokenSource = CreateStatisticsCaptureCancellationTokenSource();
+
+            _ = ThreadHelper.JoinableTaskFactory.RunAsync(async delegate
+            {
+                try
+                {
+                    await CaptureStatisticsSummaryAsync(QEOLESQLExec, captureVersion, captureCancellationTokenSource.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                }
+                catch (Exception ex)
+                {
+                    StatisticsSummaryStore.MarkUnavailable(captureVersion);
+                    _logger.Error(ex, "Failed to capture statistics summary.");
+                }
+                finally
+                {
+                    ReleaseStatisticsCaptureCancellationTokenSource(captureCancellationTokenSource);
+                }
+            });
+
 
         }
+
+        public static void CancelStatisticsCapture(bool updateStore = true)
+        {
+            CancellationTokenSource captureCancellationTokenSource;
+
+            Interlocked.Exchange(ref _pendingStatisticsCaptureVersion, 0);
+
+            lock (_statisticsCaptureSyncRoot)
+            {
+                captureCancellationTokenSource = _statisticsCaptureCancellationTokenSource;
+                _statisticsCaptureCancellationTokenSource = null;
+            }
+
+            captureCancellationTokenSource?.Cancel();
+
+            if (updateStore)
+            {
+                StatisticsSummaryStore.CancelCapture();
+            }
+        }
+
+        private static CancellationTokenSource CreateStatisticsCaptureCancellationTokenSource()
+        {
+            CancellationTokenSource previousCancellationTokenSource;
+            CancellationTokenSource nextCancellationTokenSource;
+
+            lock (_statisticsCaptureSyncRoot)
+            {
+                previousCancellationTokenSource = _statisticsCaptureCancellationTokenSource;
+                nextCancellationTokenSource = new CancellationTokenSource();
+                _statisticsCaptureCancellationTokenSource = nextCancellationTokenSource;
+            }
+
+            previousCancellationTokenSource?.Cancel();
+            return nextCancellationTokenSource;
+        }
+
+        private static void ReleaseStatisticsCaptureCancellationTokenSource(CancellationTokenSource captureCancellationTokenSource)
+        {
+            lock (_statisticsCaptureSyncRoot)
+            {
+                if (ReferenceEquals(_statisticsCaptureCancellationTokenSource, captureCancellationTokenSource))
+                {
+                    _statisticsCaptureCancellationTokenSource = null;
+                }
+            }
+
+            captureCancellationTokenSource.Dispose();
+        }
+
+        private static async Task CaptureStatisticsSummaryAsync(object sqlExecutionContext, int captureVersion, CancellationToken cancellationToken)
+        {
+            const int maxAttempts = 24;
+
+            for (int attempt = 0; attempt < maxAttempts; attempt++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!StatisticsSummaryStore.IsWindowOpen())
+                {
+                    throw new OperationCanceledException(cancellationToken);
+                }
+
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+
+                GridAccess.TryFlushStatisticsMessages();
+
+                var statisticsText = GridAccess.TryGetStatisticsMessagesText(sqlExecutionContext);
+                if (TryStoreStatisticsSummary(sqlExecutionContext, statisticsText, captureVersion, out var summary))
+                {
+                    return;
+                }
+
+                if (attempt < maxAttempts - 1)
+                {
+                    await Task.Delay(300, cancellationToken);
+                }
+            }
+
+            StatisticsSummaryStore.MarkUnavailable(captureVersion);
+        }
+
+        private static bool TryStoreStatisticsSummary(object sqlExecutionContext, string statisticsText, int captureVersion, out StatisticsSummary summary)
+        {
+            summary = null;
+
+            if (string.IsNullOrWhiteSpace(statisticsText))
+            {
+                return false;
+            }
+
+            summary = StatisticsSummaryParser.Parse(statisticsText);
+            if (summary == null)
+            {
+                return false;
+            }
+
+            var textSpan = GridAccess.GetNonPublicField(sqlExecutionContext, "textSpan");
+            var mConn = GridAccess.GetNonPublicField(sqlExecutionContext, "m_conn");
+
+            summary.QueryText = GridAccess.GetProperty(textSpan, "Text") as string;
+            summary.DataSource = GridAccess.GetProperty(mConn, "DataSource") as string;
+            summary.DatabaseName = GridAccess.GetProperty(mConn, "Database") as string;
+
+            StatisticsSummaryStore.Set(summary, captureVersion);
+            return true;
+        }
+
         private void CommandEvents_BeforeExecute(string Guid, int ID, object CustomIn, object CustomOut, ref bool CancelDefault)
         {
-            //ThreadHelper.ThrowIfNotOnUIThread();            
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            try
+            {
+                EnsureStatisticsExecutionHookForActiveWindow("query-execute-before");
+
+                if (!StatisticsSummaryStore.IsWindowOpen())
+                {
+                    return;
+                }
+
+                var captureVersion = Interlocked.Increment(ref _statisticsCaptureVersion);
+                Interlocked.Exchange(ref _pendingStatisticsCaptureVersion, captureVersion);
+
+                StatisticsSummaryStore.BeginCapture(captureVersion);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to prepare statistics capture before query execution.");
+            }
         }
 
         //it has been executed, but the Grid hasn't been created yet...

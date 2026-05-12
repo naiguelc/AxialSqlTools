@@ -574,6 +574,22 @@ ORDER BY sd.[name];
             return SaveRegisterValue("ScriptTemplatesFolder", folder);
         }
 
+        public static bool GetEnableUpdateChecks()
+        {
+            string value = GetRegisterValue("EnableUpdateChecks");
+            if (bool.TryParse(value, out bool enabled))
+            {
+                return enabled;
+            }
+
+            return true;
+        }
+
+        public static bool SaveEnableUpdateChecks(bool enableUpdateChecks)
+        {
+            return SaveRegisterValue("EnableUpdateChecks", enableUpdateChecks.ToString());
+        }
+
         public static List<FrequentlyUsedEmail> GetFrequentlyUsedEmails()
         {
 
@@ -756,6 +772,30 @@ ORDER BY sd.[name];
         public static bool SaveQueryHistoryTableName(string qhTableName)
         {
             return SaveRegisterValue("QueryHistoryTableName", qhTableName);
+        }
+
+        public static string GetQueryHistoryStorageMode()
+        {
+            string mode = GetRegisterValue("QueryHistoryStorageMode");
+            return string.IsNullOrWhiteSpace(mode) ? "Database" : mode;
+        }
+
+        public static bool SaveQueryHistoryStorageMode(string storageMode)
+        {
+            if (string.IsNullOrWhiteSpace(storageMode))
+            {
+                storageMode = "Database";
+            }
+
+            return SaveRegisterValue("QueryHistoryStorageMode", storageMode);
+        }
+
+        public static string GetQueryHistoryTextFileFolder()
+        {
+            return Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "AxialSQL",
+                "QueryHistory");
         }
 
         public static List<DataTransferSavedConnection> GetDataTransferSavedConnections()

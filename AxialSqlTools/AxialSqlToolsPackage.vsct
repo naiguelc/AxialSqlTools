@@ -143,6 +143,7 @@
           <LocCanonicalName>AxialSqlTools.ExportGridToExcel</LocCanonicalName>
         </Strings>
       </Button>
+      
       <Button guid="guidAxialSqlToolsPackageCmdSet" id="AxialExportButtonGridToExcelAndEmail" priority="0x0100" type="Button">
         <Parent guid="guidAxialSqlToolsPackageCmdSet" id="AxialToolsSubMenuGroup_Export" />
         <Icon guid="guidExportGridToEmail" id="bmpExportGridToEmail" />
@@ -152,6 +153,7 @@
           <LocCanonicalName>AxialSqlTools.ExportGridToEmail</LocCanonicalName>
         </Strings>
       </Button>
+      
       <Button guid="guidAxialSqlToolsPackageCmdSet" id="AxialExportGridAsInserts" priority="0x0110" type="Button">
         <Parent guid="guidAxialSqlToolsPackageCmdSet" id="AxialToolsSubMenuGroup_Export" />
         <Icon guid="guidExportGridToTempTable" id="bmpExportGridToTempTable" />
@@ -161,6 +163,7 @@
           <LocCanonicalName>AxialSqlTools.ExportGridAsTempTable</LocCanonicalName>
         </Strings>
       </Button>
+      
       <Button guid="guidAxialSqlToolsPackageCmdSet" id="AxialExportGridToGoogleSheet" priority="0x0000" type="Button">
         <Parent guid="guidAxialSqlToolsPackageCmdSet" id="AxialToolsSubMenuGroup_Export" />
         <Icon guid="guidExportData" id="bmpExportData" />
@@ -169,6 +172,7 @@
           <ButtonText>Export Grid to Google Sheet</ButtonText>
         </Strings>
       </Button>
+      
       <Button guid="guidAxialSqlToolsPackageCmdSet" id="AxialScriptCurrentObject" priority="0x0200" type="Button">
         <Parent guid="guidAxialSqlToolsPackageCmdSet" id="AxialToolsSubMenuGroup_Script" />
         <Icon guid="guidImagesTemplate" id="bmpTemplate" />
@@ -178,6 +182,7 @@
           <LocCanonicalName>AxialSqlTools.ScriptSelectedObject</LocCanonicalName>
         </Strings>
       </Button>
+      
       <Button guid="guidAxialSqlToolsPackageCmdSet" id="AxialQuickSearch" priority="0x0300" type="Button">
         <Parent guid="guidAxialSqlToolsPackageCmdSet" id="AxialToolsSubMenuGroup_Script" />
         <Icon guid="guidSearch" id="bmpSearch" />
@@ -188,27 +193,10 @@
           <CanonicalName>AxialSqlTools.QuickSqlSearch</CanonicalName>
         </Strings>
       </Button>
-      <!--
-      <Button guid="guidAxialSqlToolsPackageCmdSet" id="AxialFindObjectInObjectExplorer" priority="0x0000" type="Button">
-        <Parent guid="guidAxialSqlToolsPackageCmdSet" id="AxialToolsSubMenuGroup_Script" />
-        <CommandFlag>IconAndText</CommandFlag>
-        <CommandFlag>DefaultInvisible</CommandFlag>
-        <Strings>
-          <ButtonText>Find Object In Object Explorer - TODO</ButtonText>
-        </Strings>
-      </Button>
-      <Button guid="guidAxialSqlToolsPackageCmdSet" id="AxialScriptResultIntoNewWindow" priority="0x0000" type="Button">
-        <Parent guid="guidAxialSqlToolsPackageCmdSet" id="AxialToolsSubMenuGroup_Script" />
-        <CommandFlag>IconAndText</CommandFlag>        
-        <CommandFlag>DefaultInvisible</CommandFlag>
-        <Strings>
-          <ButtonText>Script Result Into a New Window - TODO</ButtonText>
-        </Strings>
-      </Button>-->
 
       <Button guid="guidAxialSqlToolsPackageCmdSet" id="AxialSnippetManagerCommand" priority="0x0010" type="Button">
         <Parent guid="guidAxialSqlToolsPackageCmdSet" id="AxialToolsSubMenuGroup_Script" />
-        <Icon guid="guidImagesTemplate" id="bmpTemplate" />
+        <Icon guid="guidSnippet" id="bmpSnippet" />
         <CommandFlag>IconAndText</CommandFlag>
         <Strings>
           <ButtonText>Snippet Manager</ButtonText>
@@ -217,7 +205,7 @@
 
       <Button guid="guidAxialSqlToolsPackageCmdSet" id="AxialSelectCurrentStatementCommand" priority="0x0020" type="Button">
         <Parent guid="guidAxialSqlToolsPackageCmdSet" id="AxialToolsSubMenuGroup_Script" />
-        <Icon guid="guidImagesTemplate" id="bmpTemplate" />
+        <Icon guid="guidSelect" id="bmpSelect" />
         <CommandFlag>IconAndText</CommandFlag>
         <Strings>
           <ButtonText>Select Current Statement</ButtonText>
@@ -235,6 +223,16 @@
         </Strings>
       </Button>
 
+      <Button guid="guidAxialSqlToolsPackageCmdSet" id="AxialStatisticsSummaryCommand" priority="0x0001" type="Button">
+        <Parent guid="guidAxialSqlToolsPackageCmdSet" id="AxialToolsSubMenuGroup_Script" />
+        <Icon guid="guidStatisticsSummary" id="bmpStatisticsSummary" />
+        <CommandFlag>IconAndText</CommandFlag>
+        <Strings>
+          <ButtonText>Statistics Summary</ButtonText>
+          <ToolTipText>Open a summary of the most recently captured SET STATISTICS IO/TIME output.</ToolTipText>
+        </Strings>
+      </Button>
+
       <Button guid="guidAxialSqlToolsPackageCmdSet" id="AxialHealthDashboardServerCommand" priority="0x0000" type="Button">
         <Parent guid="guidAxialSqlToolsPackageCmdSet" id="AxialToolsSubMenuGroup_Health" />
         <Icon guid="guidServerHealth" id="bmpServerHealth" />
@@ -242,14 +240,7 @@
           <ButtonText>Health Dashboard - Server</ButtonText>
         </Strings>
       </Button>
-      <!--<Button guid="guidAxialSqlToolsPackageCmdSet" id="AxialHealthDashboardServersCommand" priority="0x0000" type="Button">
-        <Parent guid="guidAxialSqlToolsPackageCmdSet" id="AxialToolsSubMenuGroup_Health" />
-        <Icon guid="guidServerHealth" id="bmpServerHealth" />
-        <CommandFlag>DefaultInvisible</CommandFlag>
-        <Strings>
-          <ButtonText>Health Dashboard - Group of Servers</ButtonText>
-        </Strings>
-      </Button>-->
+
       <Button guid="guidAxialSqlToolsPackageCmdSet" id="AxialSqlServerBuildsCommand" priority="0x3000" type="Button">
         <Parent guid="guidAxialSqlToolsPackageCmdSet" id="AxialToolsSubMenuGroup_Health" />
         <Icon guid="guidSqlBuildInfo" id="bmpSqlBuildInfo" />
@@ -270,15 +261,6 @@
         </Strings>
       </Button>
 
-      <!--<Button guid="guidAxialSqlToolsPackageCmdSet" id="AxialDataImportCommand" priority="0x0001" type="Button">
-        <Parent guid="guidAxialSqlToolsPackageCmdSet" id="AxialToolsSubMenuGroup_DataTransfer" />
-        <Icon guid="guidDataTransfer" id="bmpDataTransfer" />
-        <CommandFlag>DefaultInvisible</CommandFlag>  WIP, hidden for now 
-        <Strings>
-          <ButtonText>Data Import</ButtonText>
-        </Strings>
-      </Button>-->
-
       <Button guid="guidAxialSqlToolsPackageCmdSet" id="AxialDatabaseScripterCommand" priority="0x0000" type="Button">
         <Parent guid="guidAxialSqlToolsPackageCmdSet" id="AxialToolsSubMenuGroup_DataTransfer" />
         <Icon guid="guidDatabaseScripter" id="bmpDatabaseScripter" />
@@ -296,17 +278,6 @@
           <ButtonText>Database Schema Compare</ButtonText>
         </Strings>
       </Button>
-
-      <!--
-
-      <Button guid="guidAxialSqlToolsPackageCmdSet" id="AxialBackupTimelineCommand" priority="0x0000" type="Button">
-        <Parent guid="guidAxialSqlToolsPackageCmdSet" id="AxialToolsSubMenuGroup_Timelines" />
-        <Icon guid="guidDataTransfer" id="bmpDataTransfer" />
-        <CommandFlag>DefaultInvisible</CommandFlag>
-        <Strings>
-          <ButtonText>Database Backup Timeline</ButtonText>
-        </Strings>
-      </Button>-->
 
       <!-- Query templates Submenu buttons -->
       <Button guid="guidAxialSqlToolsPackageCmdSet" id="AxialQueryTemplatesButtonRefresh" priority="0x9900" type="Button">
@@ -344,17 +315,6 @@
         </Strings>
       </Button>
 
-      <Button guid="guidAxialSqlToolsPackageCmdSet" id="AxialCheckNewVersion" priority="0x3000" type="Button">
-        <Parent guid="guidAxialSqlToolsPackageCmdSet" id="AxialToolbarGroup" />
-        <Icon guid="guidAttention" id="bmpAttention" />
-        <CommandFlag>DefaultInvisible</CommandFlag>
-        <CommandFlag>DynamicVisibility</CommandFlag>
-        <CommandFlag>AllowVisibilityChangeOnToolBar</CommandFlag>
-        <Strings>
-          <ButtonText>New Version Available!</ButtonText>
-        </Strings>
-      </Button>   
-
     </Buttons>
 
     <!--The bitmaps section is used to define the bitmaps that are used for the commands.-->
@@ -372,7 +332,7 @@
       <Bitmap guid="guidExportData" href="Resources\export-data.png" usedList="bmpExportData" />
       <Bitmap guid="guidDataTransfer" href="Resources\data-source-target.png" usedList="bmpDataTransfer" />
       <Bitmap guid="guidServerHealth" href="Resources\server-health.png" usedList="bmpServerHealth" />
-      <Bitmap guid="guidAttention" href="Resources\attention.png" usedList="bmpAttention" />
+      <Bitmap guid="guidStatisticsSummary" href="Resources\statistics-summary.png" usedList="bmpStatisticsSummary" />
       <Bitmap guid="guidExportGridToEmail" href="Resources\grid-to-email.png" usedList="bmpExportGridToEmail" />
       <Bitmap guid="guidExportGridToTempTable" href="Resources\grid-to-temp-table.png" usedList="bmpExportGridToTempTable" />
       <Bitmap guid="guidQueryHistory" href="Resources\query-history.png" usedList="bmpQueryHistory" />
@@ -382,6 +342,8 @@
       <Bitmap guid="guidCompareSchemas" href="Resources\compare-schemas.png" usedList="bmpCompareSchemas" />
       <Bitmap guid="guidCopy" href="Resources\copy.png" usedList="bmpCopy" />
       <Bitmap guid="guidSearch" href="Resources\search.png" usedList="bmpSearch" />
+      <Bitmap guid="guidSelect" href="Resources\select.png" usedList="bmpSelect" />
+      <Bitmap guid="guidSnippet" href="Resources\snippet.png" usedList="bmpSnippet" />
   </Bitmaps>
 
     
@@ -412,7 +374,6 @@
       <IDSymbol name="AxialCopyQueryAsHtmlButton" value="4160" />
       <IDSymbol name="AxialSettingsButton" value="4130" />
       <IDSymbol name="AxialAboutButton" value="4129" />
-      <IDSymbol name="AxialCheckNewVersion" value="4041" />
       
       <IDSymbol name="AxialQueryTemplatesSubMenu" value="0x1100" />
       <IDSymbol name="AxialQueryTemplatesSubMenuGroup" value="0x1101" />
@@ -443,6 +404,7 @@
       <IDSymbol name="AxialDataTransferCommand" value="4143" />
 
       <IDSymbol name="AxialQueryHistoryCommand" value="4144" />
+      <IDSymbol name="AxialStatisticsSummaryCommand" value="4152" />
 
       <IDSymbol name="AxialSqlServerBuildsCommand" value="4147" />
 
@@ -454,7 +416,7 @@
       
       <IDSymbol name="AxialQuickSearch" value="4151" />
 
-      <IDSymbol name="AxialSelectCurrentStatementCommand" value="4152" />
+      <IDSymbol name="AxialSelectCurrentStatementCommand" value="4154" />
 
       <IDSymbol name="AxialSnippetManagerCommand" value="4153" />
 
@@ -484,8 +446,8 @@
     <GuidSymbol name="guidServerHealth" value="{fef3eb91-5bef-4fcc-8230-c1289c09b4c8}">
       <IDSymbol name="bmpServerHealth" value="1" />
     </GuidSymbol>
-    <GuidSymbol name="guidAttention" value="{fef3eb91-5bef-4fcc-8230-c1289c09b4c9}">
-      <IDSymbol name="bmpAttention" value="1" />
+    <GuidSymbol name="guidStatisticsSummary" value="{fef3eb91-5bef-4fcc-8230-c1289c09b4ca}">
+      <IDSymbol name="bmpStatisticsSummary" value="1" />
     </GuidSymbol>
     <GuidSymbol name="guidExportGridToEmail" value="{fef3eb91-5bef-4fcc-8230-c1289c09b4d0}">
       <IDSymbol name="bmpExportGridToEmail" value="1" />
@@ -514,6 +476,13 @@
     <GuidSymbol name="guidSearch" value="{fef3eb91-5bef-4fcc-8230-c1289c09b4d9}">
       <IDSymbol name="bmpSearch" value="1" />
     </GuidSymbol>
+    <GuidSymbol name="guidSelect" value="{fef3eb91-5bef-4fcc-8230-c1289c09b4e0}">
+      <IDSymbol name="bmpSelect" value="1" />
+    </GuidSymbol>
+    <GuidSymbol name="guidSnippet" value="{fef3eb91-5bef-4fcc-8230-c1289c09b4e1}">
+      <IDSymbol name="bmpSnippet" value="1" />
+    </GuidSymbol>
+
 
   </Symbols>
 </CommandTable>

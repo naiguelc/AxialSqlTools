@@ -23,8 +23,13 @@
     /// </summary>
     public partial class SettingsWindowControl : UserControl
     {
+        private const string QueryHistoryStorageModeDatabase = "Database";
+        private const string QueryHistoryStorageModeTextFiles = "TextFiles";
+        private const string QueryHistoryStorageModeDisabled = "Disabled";
 
         private string _queryHistoryConnectionString;
+        private readonly ToolWindowThemeController _themeController;
+        private bool updateResultSubscribed;
         private ObservableCollection<SettingsManager.ConnectionColorRule> _connectionColorRules;
 
         private string tsqlFormatExample = @"while (1=0) 
@@ -51,9 +56,13 @@ as select 1;
         {
             this.InitializeComponent();
 
-            LoadSavedSettings();
+            _connectionColorRules = new ObservableCollection<SettingsManager.ConnectionColorRule>();
+            ConnectionColorRulesListView.ItemsSource = _connectionColorRules;
+
+            _themeController = new ToolWindowThemeController(this, ApplyThemeBrushResources);
 
             this.Loaded += UserControl_Loaded;
+            this.Unloaded += UserControl_Unloaded;
 
             SourceQueryPreview.Text = tsqlFormatExample;
 
@@ -63,7 +72,60 @@ as select 1;
 
         private void UserControl_Loaded(object sender, System.Windows.RoutedEventArgs e)
         {
+            SubscribeToUpdateResultChanges();
             LoadSavedSettings();
+        }
+
+        private void UserControl_Unloaded(object sender, System.Windows.RoutedEventArgs e)
+        {
+            UnsubscribeFromUpdateResultChanges();
+        }
+
+        private void SubscribeToUpdateResultChanges()
+        {
+            if (updateResultSubscribed)
+            {
+                return;
+            }
+
+            UpdateChecker.LastUpdateResultChanged += UpdateChecker_LastUpdateResultChanged;
+            updateResultSubscribed = true;
+        }
+
+        private void UnsubscribeFromUpdateResultChanges()
+        {
+            if (!updateResultSubscribed)
+            {
+                return;
+            }
+
+            UpdateChecker.LastUpdateResultChanged -= UpdateChecker_LastUpdateResultChanged;
+            updateResultSubscribed = false;
+        }
+
+        private void ApplyThemeBrushResources()
+        {
+            ToolWindowThemeResources.ApplySharedTheme(this);
+
+            ApplyGoogleSheetsAuthorizationBrush();
+        }
+
+        private Brush GetThemedStatusBrush(bool isSuccess)
+        {
+            string key = isSuccess ? "AxialThemeStatusSuccessBrush" : "AxialThemeStatusErrorBrush";
+            return Resources[key] as Brush
+                ?? (isSuccess ? new SolidColorBrush(Color.FromRgb(0x10, 0x7C, 0x10)) : new SolidColorBrush(Color.FromRgb(0xA1, 0x26, 0x0D)));
+        }
+
+        private void ApplyGoogleSheetsAuthorizationBrush()
+        {
+            if (GoogleSheetsRefreshTokenLabel == null)
+            {
+                return;
+            }
+
+            bool isAuthorized = string.Equals(GoogleSheetsRefreshTokenLabel.Text, "Authorized", StringComparison.OrdinalIgnoreCase);
+            GoogleSheetsRefreshTokenLabel.Foreground = GetThemedStatusBrush(isAuthorized);
         }
 
         private void LoadSavedSettings()
@@ -80,6 +142,9 @@ as select 1;
 
                 _queryHistoryConnectionString = SettingsManager.GetQueryHistoryConnectionString();
                 QueryHistoryTableName.Text = SettingsManager.GetQueryHistoryTableName();
+                QueryHistoryTextFilesInfo.Text = SettingsManager.GetQueryHistoryTextFileFolder();
+                SelectQueryHistoryStorageType(SettingsManager.GetQueryHistoryStorageMode());
+                UpdateQueryHistoryStorageControls();
                 UpdateQueryHistoryConnectionDetails();
 
                 RefreshQueryHistoryCreateScript();
@@ -126,10 +191,10 @@ as select 1;
                 GoogleSheetsClientSecret.Password = googleSettings.clientSecret;
                 UpdateGoogleSheetsStatus(googleSettings.refreshToken);
 
-                // Connection Color Rules
-                _connectionColorRules = new ObservableCollection<SettingsManager.ConnectionColorRule>(
-                    SettingsManager.GetConnectionColorRules());
-                ConnectionColorRulesListView.ItemsSource = _connectionColorRules;
+                EnableUpdateChecks.IsChecked = SettingsManager.GetEnableUpdateChecks();
+                UpdateUpdateStatus();
+
+                LoadConnectionColorRules();
 
             }
             catch (Exception ex)
@@ -175,6 +240,7 @@ as select 1;
                     Label_QueryHistoryConnectionInfo.Text = ex.Message;
                 }
             }
+
         }
 
         private void Button_SaveScriptFolder_Click(object sender, RoutedEventArgs e)
@@ -364,6 +430,37 @@ as select 1;
             SavedMessage();
         }
 
+        private void button_SaveUpdateSettings_Click(object sender, RoutedEventArgs e)
+        {
+            SettingsManager.SaveEnableUpdateChecks(EnableUpdateChecks.IsChecked.GetValueOrDefault(true));
+            SavedMessage();
+        }
+
+        private void button_CheckUpdates_Click(object sender, RoutedEventArgs e)
+        {
+            UpdateChecker.CheckNow(AxialSqlToolsPackage.PackageInstance, ignoreSettings: true);
+            UpdateUpdateStatus();
+        }
+
+        private void UpdateChecker_LastUpdateResultChanged()
+        {
+            try
+            {
+                Dispatcher.BeginInvoke(new Action(UpdateUpdateStatus));
+            }
+            catch
+            {
+            }
+        }
+
+        private void UpdateUpdateStatus()
+        {
+            if (UpdateCheckStatus != null)
+            {
+                UpdateCheckStatus.Text = UpdateChecker.LastUpdateResult;
+            }
+        }
+
         private async void button_AuthorizeGoogleSheets_Click(object sender, RoutedEventArgs e)
         {
             var settings = BuildGoogleSheetsSettings();
@@ -445,7 +542,8 @@ as select 1;
         private void Button_SaveQueryHistory_Click(object sender, RoutedEventArgs e)
         {
             SettingsManager.SaveQueryHistoryConnectionString(_queryHistoryConnectionString);
-            SettingsManager.SaveQueryHistoryTableName(QueryHistoryTableName.Text); 
+            SettingsManager.SaveQueryHistoryTableName(QueryHistoryTableName.Text);
+            SettingsManager.SaveQueryHistoryStorageMode(GetSelectedQueryHistoryStorageType());
 
             SavedMessage();
 
@@ -496,15 +594,61 @@ as select 1;
             }
         }
 
-        private void Button_DisableQueryHistory_Click(object sender, RoutedEventArgs e)
+        private string GetSelectedQueryHistoryStorageType()
         {
+            if (QueryHistoryStorageType.SelectedItem is ComboBoxItem item)
+            {
+                return item.Tag?.ToString() ?? QueryHistoryStorageModeDatabase;
+            }
 
-            _queryHistoryConnectionString = "";
+            return QueryHistoryStorageModeDatabase;
+        }
 
-            UpdateQueryHistoryConnectionDetails();
+        private void SelectQueryHistoryStorageType(string storageType)
+        {
+            string mode = string.IsNullOrWhiteSpace(storageType) ? QueryHistoryStorageModeDatabase : storageType;
 
-            RefreshQueryHistoryCreateScript();
+            foreach (var obj in QueryHistoryStorageType.Items)
+            {
+                if (obj is ComboBoxItem item && string.Equals(item.Tag?.ToString(), mode, StringComparison.OrdinalIgnoreCase))
+                {
+                    QueryHistoryStorageType.SelectedItem = item;
+                    return;
+                }
+            }
 
+            QueryHistoryStorageType.SelectedIndex = 0;
+        }
+
+        private void UpdateQueryHistoryStorageControls()
+        {
+            bool isDisabledStorage = string.Equals(GetSelectedQueryHistoryStorageType(), QueryHistoryStorageModeDisabled, StringComparison.OrdinalIgnoreCase);
+            bool isDatabaseStorage = string.Equals(GetSelectedQueryHistoryStorageType(), QueryHistoryStorageModeDatabase, StringComparison.OrdinalIgnoreCase);
+            Label_QueryHistoryConnectionInfoTitle.Visibility = isDatabaseStorage ? Visibility.Visible : Visibility.Collapsed;
+            Label_QueryHistoryConnectionInfo.Visibility = isDatabaseStorage ? Visibility.Visible : Visibility.Collapsed;
+            button_SelectDatabaseFromObjectExplorer.Visibility = isDatabaseStorage ? Visibility.Visible : Visibility.Collapsed;
+            Label_QueryHistoryTargetTableName.Visibility = isDatabaseStorage ? Visibility.Visible : Visibility.Collapsed;
+            QueryHistoryTableName.Visibility = isDatabaseStorage ? Visibility.Visible : Visibility.Collapsed;
+            Label_QueryHistoryTargetTableHint.Visibility = isDatabaseStorage ? Visibility.Visible : Visibility.Collapsed;
+            Group_QueryHistoryCreateScript.Visibility = isDatabaseStorage ? Visibility.Visible : Visibility.Collapsed;
+            QueryHistoryTextFilesPanel.Visibility = (!isDatabaseStorage && !isDisabledStorage) ? Visibility.Visible : Visibility.Collapsed;
+            Label_QueryHistoryTextFilesInfo.Visibility = (!isDatabaseStorage && !isDisabledStorage) ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void QueryHistoryStorageType_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            UpdateQueryHistoryStorageControls();
+        }
+
+        private void Button_OpenQueryHistoryFolder_Click(object sender, RoutedEventArgs e)
+        {
+            string folderPath = SettingsManager.GetQueryHistoryTextFileFolder();
+            Directory.CreateDirectory(folderPath);
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = folderPath,
+                UseShellExecute = true
+            });
         }
 
         private void formatTSqlExample()
@@ -604,6 +748,21 @@ END
             }
         }
 
+        private void LoadConnectionColorRules()
+        {
+            _connectionColorRules = new ObservableCollection<SettingsManager.ConnectionColorRule>(SettingsManager.GetConnectionColorRules());
+            ConnectionColorRulesListView.ItemsSource = _connectionColorRules;
+        }
+
+        private void EnsureConnectionColorRulesLoaded()
+        {
+            if (_connectionColorRules == null)
+            {
+                _connectionColorRules = new ObservableCollection<SettingsManager.ConnectionColorRule>();
+                ConnectionColorRulesListView.ItemsSource = _connectionColorRules;
+            }
+        }
+
         private string PickColor(string currentHex)
         {
             var dialog = new System.Windows.Forms.ColorDialog();
@@ -661,6 +820,8 @@ END
 
         private void ButtonAddColorRule_Click(object sender, RoutedEventArgs e)
         {
+            EnsureConnectionColorRulesLoaded();
+
             string serverPattern = NewRuleServerPattern.Text?.Trim();
             string databasePattern = NewRuleDatabasePattern.Text?.Trim();
 
